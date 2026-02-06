@@ -5,22 +5,19 @@ import { useNavigate, Link } from 'react-router-dom';
 import logo from '../assets/logo.png';
 
 const SignIn = () => {
-  // 1. State for form inputs
+  
   const [formData, setFormData] = useState({ username: '', password: '' });
   const navigate = useNavigate();
 
-  // 2. The Login Logic
+  
   const handleLogin = async (e) => {
-    e.preventDefault(); // Prevents page reload
+    e.preventDefault(); 
     
     if (!formData.username || !formData.password) {
       return toast.error("Please fill in all fields");
     }
 
     try {
-      // Replace with your actual backend URL
-      // const response = await axios.post('http://localhost:5000/api/auth/login', formData);
-      // localStorage.setItem('token', response.data.token);
       
       localStorage.setItem('token', 'demo-token');
       const storedProfile = localStorage.getItem('profile');
@@ -44,7 +41,7 @@ const SignIn = () => {
       );
       window.dispatchEvent(new Event('profile:updated'));
       toast.success('Welcome back!');
-      navigate('/'); // Redirect to dashboard on success
+      navigate('/'); 
     } catch (err) {
       toast.error(err.response?.data?.msg || 'Invalid credentials. Try again.');
     }
@@ -58,13 +55,13 @@ const SignIn = () => {
       transition={{ duration: 0.35 }}
     >
       
-      {/* Background Diagonal Effect (Pink Shape) */}
+      {}
       <div 
         className="absolute top-0 left-0 w-full h-full bg-[#E6B9B8]" 
         style={{ clipPath: 'polygon(0 0, 70% 0, 0 60%)' }}
       ></div>
       
-      {/* Sidebar Section */}
+      {}
       <div className="w-1/4 h-full z-10 flex flex-col p-12 bg-transparent">
         <div className="flex items-center gap-3 mb-20">
           <div className="w-10 h-10 border border-black rounded-full overflow-hidden flex items-center justify-center bg-white">
@@ -81,7 +78,7 @@ const SignIn = () => {
         </nav>
       </div>
 
-      {/* Main Login Form Container */}
+      {}
       <div className="flex-1 flex flex-col items-center justify-center z-10 bg-white shadow-[-20px_0px_50px_rgba(0,0,0,0.05)] rounded-l-[120px]">
         
         <form onSubmit={handleLogin} className="flex flex-col items-center">

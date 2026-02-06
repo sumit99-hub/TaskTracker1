@@ -10,6 +10,7 @@ const initialMessages = [
     sender: 'Riya Das',
     time: '2 hours ago',
     status: 'Priority',
+    approvalState: 'Unread',
     preview: 'Scope locked. Awaiting leadership sign-off on release notes.',
   },
   {
@@ -18,6 +19,7 @@ const initialMessages = [
     sender: 'Meera Singh',
     time: 'Yesterday',
     status: 'Scheduled',
+    approvalState: 'Pending',
     preview: 'Demo set for Friday 3:00 PM. Please confirm the deck.',
   },
   {
@@ -26,6 +28,7 @@ const initialMessages = [
     sender: 'Ava Martin',
     time: '2 days ago',
     status: 'Action Required',
+    approvalState: 'Pending',
     preview: 'Nexa wants a revised roadmap for Q3 integration.',
   },
   {
@@ -34,6 +37,7 @@ const initialMessages = [
     sender: 'Dev Patel',
     time: '3 days ago',
     status: 'FYI',
+    approvalState: 'Approved',
     preview: 'Potential dependency delay flagged for compliance review.',
   },
 ];
@@ -41,6 +45,7 @@ const initialMessages = [
 const Inbox = () => {
   const [messages, setMessages] = useState(initialMessages);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('All');
   const [draft, setDraft] = useState({
     subject: '',
     sender: 'You',
@@ -64,6 +69,7 @@ const Inbox = () => {
       sender: draft.sender.trim() || 'You',
       time: 'Just now',
       status: draft.status,
+      approvalState: 'Unread',
       preview: trimmedPreview,
     };
 
@@ -99,6 +105,28 @@ const Inbox = () => {
     toast.success('Marked as done');
   };
 
+  const counts = messages.reduce(
+    (acc, message) => {
+      const key = message.approvalState;
+      if (key && acc[key] !== undefined) {
+        acc[key] += 1;
+      }
+      return acc;
+    },
+    { Unread: 0, Pending: 0, Approved: 0 }
+  );
+
+  const stats = [
+    { label: 'Unread', value: counts.Unread, icon: MailOpen },
+    { label: 'Pending', value: counts.Pending, icon: Clock },
+    { label: 'Approved', value: counts.Approved, icon: CheckCircle2 },
+  ];
+
+  const filteredMessages =
+    activeFilter === 'All'
+      ? messages
+      : messages.filter((message) => message.approvalState === activeFilter);
+
   return (
     <motion.div
       className="ml-64 p-10"
@@ -122,29 +150,47 @@ const Inbox = () => {
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-10">
-        {[
-          { label: 'Unread', value: '4', icon: MailOpen },
-          { label: 'Pending', value: '2', icon: Clock },
-          { label: 'Approved', value: '16', icon: CheckCircle2 },
-        ].map((stat) => (
-          <motion.div
+        {stats.map((stat) => {
+          const isActive = activeFilter === stat.label;
+          return (
+            <motion.button
             key={stat.label}
+            type="button"
             whileHover={{ y: -4 }}
-            className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm flex items-center gap-4"
+            whileTap={{ scale: 0.98 }}
+            className={`bg-white border rounded-2xl p-5 shadow-sm flex items-center gap-4 text-left transition ${
+              isActive ? 'border-black ring-1 ring-black/20' : 'border-gray-100'
+            }`}
+            aria-pressed={isActive}
+            onClick={() =>
+              setActiveFilter((prev) => (prev === stat.label ? 'All' : stat.label))
+            }
           >
-            <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center">
+            <div
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                isActive ? 'bg-black text-white' : 'bg-gray-100'
+              }`}
+            >
               <stat.icon size={20} />
             </div>
             <div>
               <p className="text-gray-500 text-sm">{stat.label}</p>
               <h3 className="text-2xl font-bold">{stat.value}</h3>
             </div>
-          </motion.div>
-        ))}
+          </motion.button>
+          );
+        })}
       </div>
 
       <div className="space-y-4">
-        {messages.map((message, index) => (
+        {filteredMessages.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-gray-500">
+            {activeFilter === 'All'
+              ? 'No messages right now.'
+              : `No ${activeFilter.toLowerCase()} messages right now.`}
+          </div>
+        ) : (
+          filteredMessages.map((message, index) => (
           <motion.button
             key={message.id}
             className="w-full text-left bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition"
@@ -200,7 +246,8 @@ const Inbox = () => {
               </span>
             </div>
           </motion.button>
-        ))}
+          ))
+        )}
       </div>
 
       <AnimatePresence>

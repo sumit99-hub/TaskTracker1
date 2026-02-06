@@ -10,7 +10,7 @@ import { exportWeeklyReport } from '../lib/exportWeeklyReport';
 
 const Dashboard = () => {
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true); // 1. Start as true
+  const [loading, setLoading] = useState(true); 
   const [settings, setSettings] = useState(getSettings());
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
@@ -28,7 +28,7 @@ const Dashboard = () => {
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false); // 2. Turn off loading when done
+        setLoading(false); 
       }
     };
     fetchTasks();
