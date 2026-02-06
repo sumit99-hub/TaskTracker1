@@ -5,7 +5,9 @@ import Dashboard from './pages/Dashboard';
 import SignIn from './pages/Signin';
 import AdminSignin from './pages/AdminSignin';
 import AdminSignup from './pages/AdminSignup';
+import AdminForgotPassword from './pages/AdminForgotPassword';
 import SignUp from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import Clients from './pages/Clients';
 import Inbox from './pages/Inbox';
 import Contacts from './pages/Contacts';
@@ -30,8 +32,10 @@ function App() {
       <Routes>
         <Route path="/signin" element={<SignIn />} />
         <Route path="/admin/signin" element={<AdminSignin />} />
+        <Route path="/admin/forgot-password" element={<AdminForgotPassword />} />
         <Route path="/admin/signup" element={<AdminSignup />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route
           element={
             <ProtectedRoute>

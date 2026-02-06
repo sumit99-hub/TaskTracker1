@@ -1,93 +1,72 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { useNavigate, Link } from 'react-router-dom';
 import { api, API_BASE_URL } from '../lib/api';
 import logo from '../assets/logo.png';
 
-const AdminSignin = () => {
-  const [formData, setFormData] = useState({ email: '', password: '', otp: '' });
-  const [step, setStep] = useState('credentials');
+const ForgotPassword = () => {
+  const navigate = useNavigate();
+  const [step, setStep] = useState('request');
   const [loading, setLoading] = useState(false);
   const [otpHint, setOtpHint] = useState('');
-  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    email: '',
+    otp: '',
+    password: '',
+    confirmPassword: '',
+  });
 
-  const handleLogin = async (event) => {
+  const handleRequest = async (event) => {
+    event.preventDefault();
+    if (!formData.email) {
+      return toast.error('Enter your email to receive an OTP');
+    }
+
+    setLoading(true);
+    try {
+      const { data } = await api.post('/api/auth/forgot-password', {
+        email: formData.email,
+        role: 'user',
+      });
+      setOtpHint(data?.devOtp ? `Demo OTP: ${data.devOtp}` : '');
+      setStep('reset');
+      toast.success('OTP sent to your email.');
+    } catch (err) {
+      if (!err.response) {
+        return toast.error(`Backend not reachable at ${API_BASE_URL}`);
+      }
+      const message =
+        err.response?.data?.errors?.[0]?.msg ||
+        err.response?.data?.msg ||
+        'Unable to send OTP. Try again.';
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async (event) => {
     event.preventDefault();
 
-    if (!formData.email || !formData.password) {
+    if (!formData.otp || !formData.password || !formData.confirmPassword) {
       return toast.error('Please fill in all fields');
     }
 
-    setLoading(true);
-    try {
-      const { data } = await api.post('/api/auth/signin', {
-        email: formData.email,
-        password: formData.password,
-        role: 'admin',
-      });
-      setOtpHint(data?.devOtp ? `Demo OTP: ${data.devOtp}` : '');
-      setStep('otp');
-      toast.success('OTP sent to your admin email.');
-    } catch (err) {
-      if (!err.response) {
-        return toast.error(`Backend not reachable at ${API_BASE_URL}`);
-      }
-      const message =
-        err.response?.data?.errors?.[0]?.msg ||
-        err.response?.data?.msg ||
-        'Invalid credentials. Try again.';
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async (event) => {
-    event.preventDefault();
-
-    if (!formData.otp) {
-      return toast.error('Enter the OTP sent to your email');
+    if (formData.password !== formData.confirmPassword) {
+      return toast.error('Passwords do not match');
     }
 
     setLoading(true);
     try {
-      const { data } = await api.post('/api/auth/verify-otp', {
+      await api.post('/api/auth/reset-password', {
         email: formData.email,
-        role: 'admin',
-        purpose: 'login',
+        role: 'user',
         code: formData.otp,
+        newPassword: formData.password,
       });
-
-      localStorage.setItem('token', data?.token || 'demo-token');
-      const storedProfile = localStorage.getItem('profile');
-      const existingProfile = storedProfile ? JSON.parse(storedProfile) : {};
-      const displayName =
-        data?.user?.firstName ||
-        existingProfile.name ||
-        formData.email.split('@')[0] ||
-        'Admin';
-
-      localStorage.setItem(
-        'profile',
-        JSON.stringify({
-          ...existingProfile,
-          name: displayName,
-          role: 'Administrator',
-          accessLevel: 'Admin',
-          email: data?.user?.email || formData.email,
-          phone: existingProfile.phone || '+1 415 555 2266',
-          location: existingProfile.location || 'San Francisco, CA',
-          company: existingProfile.company || 'Task Tracker',
-          website: existingProfile.website || 'https://tasktracker.io',
-          bio:
-            existingProfile.bio ||
-            'Oversees security, visibility, and weekly reporting for the organization.',
-        })
-      );
-      window.dispatchEvent(new Event('profile:updated'));
-      toast.success('Admin access granted.');
-      navigate('/admin');
+      toast.success('Password updated. Please sign in.');
+      navigate('/signin');
     } catch (err) {
       if (!err.response) {
         return toast.error(`Backend not reachable at ${API_BASE_URL}`);
@@ -95,25 +74,17 @@ const AdminSignin = () => {
       const message =
         err.response?.data?.errors?.[0]?.msg ||
         err.response?.data?.msg ||
-        'OTP verification failed. Try again.';
+        'Password reset failed. Try again.';
       toast.error(message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleResendOtp = async () => {
-    if (!formData.email || !formData.password) {
-      return toast.error('Enter your email and password to resend OTP');
-    }
-    await handleLogin({ preventDefault: () => {} });
   };
 
   const fillDemo = () => {
     setFormData((prev) => ({
       ...prev,
-      email: 'admin@tasktracker.io',
-      password: 'admin123',
+      email: 'member@tasktracker.io',
     }));
   };
 
@@ -125,7 +96,7 @@ const AdminSignin = () => {
       transition={{ duration: 0.35 }}
     >
       <div
-        className="absolute top-0 left-0 w-full h-full bg-[#C9D9F2]"
+        className="absolute top-0 left-0 w-full h-full bg-[#E6B9B8]"
         style={{ clipPath: 'polygon(0 0, 70% 0, 0 60%)' }}
       ></div>
 
@@ -140,35 +111,35 @@ const AdminSignin = () => {
         </div>
 
         <nav className="flex flex-col gap-6">
-          <Link to="/admin/signin" className="font-bold text-black border-l-4 border-black pl-2">
-            Admin Sign In
-          </Link>
-          <Link to="/admin/signup" className="text-gray-500 hover:text-black transition-all pl-2">
-            Admin Sign Up
-          </Link>
           <Link to="/signin" className="text-gray-500 hover:text-black transition-all pl-2">
             User Sign In
           </Link>
           <Link to="/signup" className="text-gray-500 hover:text-black transition-all pl-2">
             Sign Up
           </Link>
+          <Link to="/admin/signin" className="text-gray-500 hover:text-black transition-all pl-2">
+            Admin Sign In
+          </Link>
+          <Link to="/admin/signup" className="text-gray-500 hover:text-black transition-all pl-2">
+            Admin Sign Up
+          </Link>
         </nav>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center z-10 bg-white shadow-[-20px_0px_50px_rgba(0,0,0,0.05)] rounded-l-[120px]">
         <form
-          onSubmit={step === 'credentials' ? handleLogin : handleVerifyOtp}
+          onSubmit={step === 'request' ? handleRequest : handleReset}
           className="flex flex-col items-center"
         >
           <h1 className="text-6xl font-black italic mb-12 tracking-tight">
-            {step === 'credentials' ? 'Admin Sign In' : 'Verify Admin OTP'}
+            {step === 'request' ? 'Reset Password' : 'Confirm Reset'}
           </h1>
 
           <div className="w-96">
             <AnimatePresence mode="wait">
-              {step === 'credentials' ? (
+              {step === 'request' ? (
                 <motion.div
-                  key="credentials"
+                  key="request"
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -16 }}
@@ -178,37 +149,18 @@ const AdminSignin = () => {
                   <div className="relative">
                     <input
                       type="email"
-                      placeholder="Admin email"
+                      placeholder="Email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="w-full border-b border-gray-400 pb-2 outline-none focus:border-black transition-colors"
                     />
                   </div>
 
-                  <div className="relative">
-                    <input
-                      type="password"
-                      placeholder="Password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full border-b border-gray-400 pb-2 outline-none focus:border-black transition-colors"
-                    />
-                    <div className="flex justify-end mt-2">
-                      <Link
-                        to="/admin/forgot-password"
-                        className="text-xs text-gray-500 hover:text-black transition-colors"
-                      >
-                        Forgot password?
-                      </Link>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-gray-100 bg-[#F2F6FF] px-4 py-3 text-xs text-gray-600">
+                  <div className="rounded-2xl border border-gray-100 bg-[#F7F4F2] px-4 py-3 text-xs text-gray-600">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-gray-700">Demo admin</p>
-                        <p>Email: admin@tasktracker.io</p>
-                        <p>Password: admin123</p>
+                        <p className="font-semibold text-gray-700">Demo account</p>
+                        <p>Email: member@tasktracker.io</p>
                       </div>
                       <button
                         type="button"
@@ -222,15 +174,21 @@ const AdminSignin = () => {
 
                   <button
                     type="submit"
-                    className="w-full bg-[#BDD3F0] py-4 rounded-2xl font-bold text-lg shadow-md hover:shadow-lg hover:bg-[#A9C4E8] transition-all transform active:scale-95 mt-4 disabled:opacity-60"
+                    className="w-full bg-[#AED6F1] py-4 rounded-2xl font-bold text-lg shadow-md hover:shadow-lg hover:bg-[#99C7E6] transition-all transform active:scale-95 mt-4 disabled:opacity-60"
                     disabled={loading}
                   >
                     {loading ? 'Sending OTP...' : 'Send OTP'}
                   </button>
+                  <Link
+                    to="/signin"
+                    className="text-xs text-gray-500 hover:text-black transition-colors text-center"
+                  >
+                    Back to sign in
+                  </Link>
                 </motion.div>
               ) : (
                 <motion.div
-                  key="otp"
+                  key="reset"
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -16 }}
@@ -249,30 +207,41 @@ const AdminSignin = () => {
                   </div>
                   {otpHint ? <p className="text-xs text-gray-400 -mt-4">{otpHint}</p> : null}
 
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="New password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full border-b border-gray-400 pb-2 outline-none focus:border-black transition-colors"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={formData.confirmPassword}
+                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      className="w-full border-b border-gray-400 pb-2 outline-none focus:border-black transition-colors"
+                    />
+                  </div>
+
                   <button
                     type="submit"
-                    className="w-full bg-[#BDD3F0] py-4 rounded-2xl font-bold text-lg shadow-md hover:shadow-lg hover:bg-[#A9C4E8] transition-all transform active:scale-95 mt-4 disabled:opacity-60"
+                    className="w-full bg-[#AED6F1] py-4 rounded-2xl font-bold text-lg shadow-md hover:shadow-lg hover:bg-[#99C7E6] transition-all transform active:scale-95 mt-4 disabled:opacity-60"
                     disabled={loading}
                   >
-                    {loading ? 'Verifying...' : 'Verify & Sign In'}
+                    {loading ? 'Updating...' : 'Update Password'}
                   </button>
 
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      className="hover:text-black transition-colors"
-                    >
-                      Resend OTP
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStep('credentials')}
-                      className="hover:text-black transition-colors"
-                    >
-                      Use different email
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStep('request')}
+                    className="text-xs text-gray-500 hover:text-black transition-colors"
+                  >
+                    Use a different email
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -283,4 +252,4 @@ const AdminSignin = () => {
   );
 };
 
-export default AdminSignin;
+export default ForgotPassword;
