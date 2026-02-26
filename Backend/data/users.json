@@ -13,6 +13,13 @@
       "role": "admin",
       "passwordHash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
       "createdAt": "2026-02-06T13:41:21.011Z"
+    },
+    {
+      "email": "sahs3260@gmail.com",
+      "firstName": "sumit sah",
+      "role": "user",
+      "passwordHash": "b0c9301a3109ccbbe21b6957cab14f336a484ab9aeaa77a5fedf4c57622dbecd",
+      "createdAt": "2026-02-08T08:33:39.261Z"
     }
   ]
 }

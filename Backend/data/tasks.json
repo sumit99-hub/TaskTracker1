@@ -1,0 +1,44 @@
+{
+  "tasks": [
+    {
+      "title": "Design landing page",
+      "description": "Create hero layout, CTA placement, and overall visual direction.",
+      "status": "To do",
+      "priority": "High",
+      "assignedTo": "Team Member",
+      "createdBy": "Admin"
+    },
+    {
+      "title": "Set up onboarding flow",
+      "description": "Draft steps for first-time users and define required fields.",
+      "status": "In progress",
+      "priority": "Medium",
+      "assignedTo": "Admin",
+      "createdBy": "Admin"
+    },
+    {
+      "title": "Implement task filters",
+      "description": "Support filtering by status, priority, and assignee.",
+      "status": "To do",
+      "priority": "Medium",
+      "assignedTo": "Team Member",
+      "createdBy": "Admin"
+    },
+    {
+      "title": "Write API documentation",
+      "description": "Document auth and task endpoints with example payloads.",
+      "status": "Closed",
+      "priority": "Low",
+      "assignedTo": "Admin",
+      "createdBy": "Admin"
+    },
+    {
+      "title": "Add email templates",
+      "description": "Create password reset and OTP templates.",
+      "status": "In progress",
+      "priority": "High",
+      "assignedTo": "Team Member",
+      "createdBy": "Admin"
+    }
+  ]
+}

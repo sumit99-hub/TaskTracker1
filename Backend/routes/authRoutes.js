@@ -2,8 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const fs = require('fs');
-const path = require('path');
+const User = require('../models/User');
 
 const router = express.Router();
 
@@ -13,27 +12,8 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const ALLOWED_ROLES = new Set(['user', 'admin']);
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
-const userKey = (email, role) => `${normalizeEmail(email)}:${role}`;
 const hashPassword = (password) =>
   crypto.createHash('sha256').update(password).digest('hex');
-
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-
-const DEFAULT_USERS = [
-  {
-    email: 'member@tasktracker.io',
-    firstName: 'Team Member',
-    role: 'user',
-    passwordHash: hashPassword('password123'),
-  },
-  {
-    email: 'admin@tasktracker.io',
-    firstName: 'Admin',
-    role: 'admin',
-    passwordHash: hashPassword('admin123'),
-  },
-];
 
 let cachedTransporter;
 
@@ -101,80 +81,8 @@ const sendOtpEmail = async ({ email, role, code, purpose }) => {
   }
 };
 
-const requireEmailDelivery = () =>
-  String(process.env.OTP_DEV_MODE || 'false').toLowerCase() !== 'true';
-
-const saveUsers = (usersMap) => {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  const payload = {
-    users: Array.from(usersMap.values()),
-  };
-  fs.writeFileSync(USERS_FILE, JSON.stringify(payload, null, 2), 'utf8');
-};
-
-const ensureDefaultUsers = (usersMap) => {
-  let changed = false;
-  DEFAULT_USERS.forEach((user) => {
-    const key = userKey(user.email, user.role);
-    if (!usersMap.has(key)) {
-      usersMap.set(key, {
-        ...user,
-        createdAt: new Date().toISOString(),
-      });
-      changed = true;
-    }
-  });
-  if (changed) {
-    saveUsers(usersMap);
-  }
-};
-
-const loadUsers = () => {
-  try {
-    if (!fs.existsSync(USERS_FILE)) {
-      const seeded = new Map();
-      DEFAULT_USERS.forEach((user) => {
-        seeded.set(userKey(user.email, user.role), {
-          ...user,
-          createdAt: new Date().toISOString(),
-        });
-      });
-      saveUsers(seeded);
-      return seeded;
-    }
-    const raw = fs.readFileSync(USERS_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed?.users) ? parsed.users : [];
-    const map = new Map();
-    list.forEach((user) => {
-      if (user?.email) {
-        const role = user.role || 'user';
-        const normalizedEmail = normalizeEmail(user.email);
-        map.set(userKey(normalizedEmail, role), {
-          ...user,
-          email: normalizedEmail,
-          role,
-        });
-      }
-    });
-    ensureDefaultUsers(map);
-    return map;
-  } catch (error) {
-    const fallback = new Map();
-    DEFAULT_USERS.forEach((user) => {
-      fallback.set(userKey(user.email, user.role), {
-        ...user,
-        createdAt: new Date().toISOString(),
-      });
-    });
-    saveUsers(fallback);
-    return fallback;
-  }
-};
-
-const users = loadUsers();
+const isDevMode = () =>
+  String(process.env.OTP_DEV_MODE || 'true').toLowerCase() === 'true';
 
 const issueOtp = ({ email, role, purpose }) => {
   const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -211,6 +119,7 @@ const validationErrorResponse = (req, res) => {
   return null;
 };
 
+// Signup route
 router.post(
   '/signup',
   [
@@ -219,7 +128,7 @@ router.post(
     body('firstName').notEmpty().withMessage('First name is required'),
     body('role').optional().isIn(['user', 'admin']).withMessage('Role must be user or admin'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (validationErrorResponse(req, res)) return;
 
     const { email, password, firstName, role = 'user' } = req.body;
@@ -228,23 +137,39 @@ router.post(
     }
 
     const normalizedEmail = normalizeEmail(email);
-    const key = userKey(normalizedEmail, role);
-    if (users.has(key)) {
-      return res.status(409).json({ msg: 'Account already exists for this email.' });
+
+    try {
+      
+      const existingUser = await User.findOne({
+        where: { email: normalizedEmail },
+      });
+      
+      if (existingUser) {
+        return res.status(409).json({ msg: 'Account already exists for this email.' });
+      }
+
+      
+      await User.create({
+        email: normalizedEmail,
+        firstName,
+        role,
+        passwordHash: hashPassword(password),
+      });
+
+      res.json({ ok: true, message: 'User created successfully.' });
+    } catch (error) {
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({ msg: 'Account already exists for this email.' });
+      }
+      if (error?.name === 'SequelizeValidationError') {
+        return res.status(400).json({ msg: 'Invalid account details.' });
+      }
+      console.error('Signup error:', error);
+      res.status(500).json({ msg: 'Server error' });
     }
-
-    users.set(key, {
-      email: normalizedEmail,
-      firstName,
-      role,
-      passwordHash: hashPassword(password),
-      createdAt: new Date().toISOString(),
-    });
-    saveUsers(users);
-
-    res.json({ ok: true, message: 'User created successfully.' });
   }
 );
+
 
 router.post(
   '/signin',
@@ -262,43 +187,44 @@ router.post(
     }
 
     const normalizedEmail = normalizeEmail(email);
-    const user = users.get(userKey(normalizedEmail, role));
-    if (!user) {
-      return res.status(401).json({ msg: 'Account not found for this role.' });
-    }
 
-    const isMatch = user.passwordHash === hashPassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ msg: 'Invalid credentials.' });
-    }
-
-    const otp = issueOtp({ email: normalizedEmail, role, purpose: 'login' });
-    const emailResult = await sendOtpEmail({
-      email: normalizedEmail,
-      role,
-      code: otp,
-      purpose: 'login',
-    });
-    const devMode = String(process.env.OTP_DEV_MODE || 'false').toLowerCase() === 'true';
-    const mustSendEmail = requireEmailDelivery();
-    if (mustSendEmail && !emailResult.sent) {
-      return res.status(500).json({
-        msg:
-          emailResult.reason === 'Email not configured'
-            ? 'Email delivery not configured. Set SMTP_* values in Backend/.env.'
-            : 'Failed to send OTP email. Check SMTP settings.',
+    try {
+      const user = await User.findOne({ 
+        where: { email: normalizedEmail, role } 
       });
-    }
-    const includeDevOtp = devMode && !emailResult.sent;
+      
+      if (!user) {
+        return res.status(401).json({ msg: 'Account not found for this role.' });
+      }
 
-    res.json({
-      otpSent: true,
-      expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
-      emailSent: emailResult.sent,
-      devOtp: includeDevOtp ? otp : undefined,
-    });
+      const isMatch = user.passwordHash === hashPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ msg: 'Invalid credentials.' });
+      }
+
+      const otp = issueOtp({ email: normalizedEmail, role, purpose: 'login' });
+      const emailResult = await sendOtpEmail({
+        email: normalizedEmail,
+        role,
+        code: otp,
+        purpose: 'login',
+      });
+      const devMode = isDevMode();
+      const includeDevOtp = !emailResult.sent || devMode;
+
+      res.json({
+        otpSent: true,
+        expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+        emailSent: emailResult.sent,
+        devOtp: includeDevOtp ? otp : undefined,
+      });
+    } catch (error) {
+      console.error('Signin error:', error);
+      res.status(500).json({ msg: 'Server error' });
+    }
   }
 );
+
 
 router.post(
   '/verify-otp',
@@ -312,7 +238,7 @@ router.post(
     body('role').optional().isIn(['user', 'admin']).withMessage('Role must be user or admin'),
     body('purpose').optional().isIn(['login', 'reset']).withMessage('Invalid OTP purpose'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (validationErrorResponse(req, res)) return;
 
     const { email, role = 'user', purpose = 'login', code } = req.body;
@@ -321,33 +247,43 @@ router.post(
     }
 
     const normalizedEmail = normalizeEmail(email);
-    const user = users.get(userKey(normalizedEmail, role));
-    if (!user) {
-      return res.status(401).json({ msg: 'Account not found for this role.' });
+
+    try {
+      const user = await User.findOne({ 
+        where: { email: normalizedEmail, role } 
+      });
+      
+      if (!user) {
+        return res.status(401).json({ msg: 'Account not found for this role.' });
+      }
+
+      const otpCheck = verifyOtp({ email: normalizedEmail, role, purpose, code });
+      if (!otpCheck.ok) {
+        return res.status(401).json({ msg: otpCheck.message });
+      }
+
+      const secret = process.env.JWT_SECRET || 'dev-secret';
+      const token = jwt.sign(
+        { user: { email: normalizedEmail, role } },
+        secret,
+        { expiresIn: '2h' }
+      );
+
+      res.json({
+        token,
+        user: {
+          email: normalizedEmail,
+          firstName: user.firstName,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error('Verify OTP error:', error);
+      res.status(500).json({ msg: 'Server error' });
     }
-
-    const otpCheck = verifyOtp({ email: normalizedEmail, role, purpose, code });
-    if (!otpCheck.ok) {
-      return res.status(401).json({ msg: otpCheck.message });
-    }
-
-    const secret = process.env.JWT_SECRET || 'dev-secret';
-    const token = jwt.sign(
-      { user: { email: normalizedEmail, role } },
-      secret,
-      { expiresIn: '2h' }
-    );
-
-    res.json({
-      token,
-      user: {
-        email: normalizedEmail,
-        firstName: user.firstName,
-        role: user.role,
-      },
-    });
   }
 );
+
 
 router.post(
   '/forgot-password',
@@ -364,38 +300,44 @@ router.post(
     }
 
     const normalizedEmail = normalizeEmail(email);
-    const user = users.get(userKey(normalizedEmail, role));
-    if (!user) {
-      return res.status(404).json({ msg: 'Account not found for this role.' });
-    }
 
-    const otp = issueOtp({ email: normalizedEmail, role, purpose: 'reset' });
-    const emailResult = await sendOtpEmail({
-      email: normalizedEmail,
-      role,
-      code: otp,
-      purpose: 'reset',
-    });
-    const devMode = String(process.env.OTP_DEV_MODE || 'false').toLowerCase() === 'true';
-    const mustSendEmail = requireEmailDelivery();
-    if (mustSendEmail && !emailResult.sent) {
-      return res.status(500).json({
-        msg:
-          emailResult.reason === 'Email not configured'
-            ? 'Email delivery not configured. Set SMTP_* values in Backend/.env.'
-            : 'Failed to send OTP email. Check SMTP settings.',
+    try {
+      const user = await User.findOne({ 
+        where: { email: normalizedEmail, role } 
       });
-    }
-    const includeDevOtp = devMode && !emailResult.sent;
+      
+      if (!user) {
+        
+        return res.json({ 
+          otpSent: true, 
+          expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+          emailSent: false,
+        });
+      }
 
-    res.json({
-      otpSent: true,
-      expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
-      emailSent: emailResult.sent,
-      devOtp: includeDevOtp ? otp : undefined,
-    });
+      const otp = issueOtp({ email: normalizedEmail, role, purpose: 'reset' });
+      const emailResult = await sendOtpEmail({
+        email: normalizedEmail,
+        role,
+        code: otp,
+        purpose: 'reset',
+      });
+      const devMode = isDevMode();
+      const includeDevOtp = !emailResult.sent || devMode;
+
+      res.json({
+        otpSent: true,
+        expiresInSeconds: Math.floor(OTP_TTL_MS / 1000),
+        emailSent: emailResult.sent,
+        devOtp: includeDevOtp ? otp : undefined,
+      });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ msg: 'Server error' });
+    }
   }
 );
+
 
 router.post(
   '/reset-password',
@@ -409,7 +351,7 @@ router.post(
       .withMessage('OTP must be numeric'),
     body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
   ],
-  (req, res) => {
+  async (req, res) => {
     if (validationErrorResponse(req, res)) return;
 
     const { email, role = 'user', code, newPassword } = req.body;
@@ -418,24 +360,29 @@ router.post(
     }
 
     const normalizedEmail = normalizeEmail(email);
-    const user = users.get(userKey(normalizedEmail, role));
-    if (!user) {
-      return res.status(404).json({ msg: 'Account not found for this role.' });
+
+    try {
+      const user = await User.findOne({ 
+        where: { email: normalizedEmail, role } 
+      });
+      
+      if (!user) {
+        return res.status(404).json({ msg: 'Account not found for this role.' });
+      }
+
+      const otpCheck = verifyOtp({ email: normalizedEmail, role, purpose: 'reset', code });
+      if (!otpCheck.ok) {
+        return res.status(401).json({ msg: otpCheck.message });
+      }
+
+      user.passwordHash = hashPassword(newPassword);
+      await user.save();
+
+      res.json({ ok: true, message: 'Password updated successfully.' });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ msg: 'Server error' });
     }
-
-    const otpCheck = verifyOtp({ email: normalizedEmail, role, purpose: 'reset', code });
-    if (!otpCheck.ok) {
-      return res.status(401).json({ msg: otpCheck.message });
-    }
-
-    users.set(userKey(normalizedEmail, role), {
-      ...user,
-      passwordHash: hashPassword(newPassword),
-      updatedAt: new Date().toISOString(),
-    });
-    saveUsers(users);
-
-    res.json({ ok: true, message: 'Password updated successfully.' });
   }
 );
 
