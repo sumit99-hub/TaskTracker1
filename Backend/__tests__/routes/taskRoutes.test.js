@@ -6,15 +6,14 @@ const Task = require('../../models/Task');
 const User = require('../../models/User');
 const taskRoutes = require('../../routes/taskRoutes');
 
-// Create test app
 const app = express();
 app.use(express.json());
 app.use('/api/tasks', taskRoutes);
 
-// Mock JWT_SECRET for tests
+
 process.env.JWT_SECRET = 'test-secret-key';
 
-// Generate valid token
+
 const generateToken = (email, role) => {
   return jwt.sign(
     { user: { email, role } },
@@ -30,7 +29,6 @@ describe('Task Routes', () => {
   beforeAll(async () => {
     await sequelize.sync({ force: true });
     
-    // Create test users
     await User.create({
       email: 'user@test.com',
       firstName: 'Test User',
@@ -64,7 +62,7 @@ describe('Task Routes', () => {
     });
 
     it('should return tasks with valid token', async () => {
-      // Create some tasks
+     
       await Task.create({ title: 'Task 1' });
       await Task.create({ title: 'Task 2' });
 
@@ -189,7 +187,7 @@ describe('Task Routes', () => {
 
       expect(response.status).toBe(200);
       
-      // Verify task is deleted
+     
       const task = await Task.findByPk(taskId);
       expect(task).toBeNull();
     });
