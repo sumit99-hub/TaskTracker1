@@ -4,3 +4,4 @@ Backend/node_modules
 dist
 build
 .env
+Backend/data/*.sqlite

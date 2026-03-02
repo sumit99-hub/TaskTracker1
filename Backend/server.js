@@ -42,7 +42,7 @@ connectDB().then(async () => {
     });
   });
 
-  const PORT = Number(process.env.PORT) || 5002;
+  const PORT = Number(process.env.PORT || process.env.BACKEND_PORT) || 5003;
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
