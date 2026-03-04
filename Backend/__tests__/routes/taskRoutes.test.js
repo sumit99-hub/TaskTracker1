@@ -9,6 +9,8 @@ const taskRoutes = require('../../routes/taskRoutes');
 const app = express();
 app.use(express.json());
 app.use('/api/tasks', taskRoutes);
+let server;
+let api;
 
 
 process.env.JWT_SECRET = 'test-secret-key';
@@ -27,6 +29,11 @@ describe('Task Routes', () => {
   let adminToken;
 
   beforeAll(async () => {
+    server = await new Promise((resolve, reject) => {
+      const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+      instance.on('error', reject);
+    });
+    api = request(server);
     await sequelize.sync({ force: true });
     
     await User.create({
@@ -49,6 +56,9 @@ describe('Task Routes', () => {
 
   afterAll(async () => {
     await sequelize.close();
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   beforeEach(async () => {
@@ -57,7 +67,7 @@ describe('Task Routes', () => {
 
   describe('GET /api/tasks', () => {
     it('should return 401 without token', async () => {
-      const response = await request(app).get('/api/tasks');
+      const response = await api.get('/api/tasks');
       expect(response.status).toBe(401);
     });
 
@@ -66,7 +76,7 @@ describe('Task Routes', () => {
       await Task.create({ title: 'Task 1' });
       await Task.create({ title: 'Task 2' });
 
-      const response = await request(app)
+      const response = await api
         .get('/api/tasks')
         .set('Authorization', `Bearer ${userToken}`);
 
@@ -78,7 +88,7 @@ describe('Task Routes', () => {
 
   describe('POST /api/tasks', () => {
     it('should create a task with valid token', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/tasks')
         .set('Authorization', `Bearer ${userToken}`)
         .send({
@@ -95,7 +105,7 @@ describe('Task Routes', () => {
     });
 
     it('should create task with defaults', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/tasks')
         .set('Authorization', `Bearer ${userToken}`)
         .send({
@@ -108,7 +118,7 @@ describe('Task Routes', () => {
     });
 
     it('should require title', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/tasks')
         .set('Authorization', `Bearer ${userToken}`)
         .send({
@@ -131,7 +141,7 @@ describe('Task Routes', () => {
     });
 
     it('should update task status', async () => {
-      const response = await request(app)
+      const response = await api
         .patch(`/api/tasks/${taskId}`)
         .set('Authorization', `Bearer ${userToken}`)
         .send({
@@ -143,7 +153,7 @@ describe('Task Routes', () => {
     });
 
     it('should update multiple fields', async () => {
-      const response = await request(app)
+      const response = await api
         .patch(`/api/tasks/${taskId}`)
         .set('Authorization', `Bearer ${userToken}`)
         .send({
@@ -159,7 +169,7 @@ describe('Task Routes', () => {
     });
 
     it('should return 404 for non-existent task', async () => {
-      const response = await request(app)
+      const response = await api
         .patch('/api/tasks/non-existent-id')
         .set('Authorization', `Bearer ${userToken}`)
         .send({
@@ -181,7 +191,7 @@ describe('Task Routes', () => {
     });
 
     it('should delete a task', async () => {
-      const response = await request(app)
+      const response = await api
         .delete(`/api/tasks/${taskId}`)
         .set('Authorization', `Bearer ${userToken}`);
 
@@ -193,7 +203,7 @@ describe('Task Routes', () => {
     });
 
     it('should return 404 for non-existent task', async () => {
-      const response = await request(app)
+      const response = await api
         .delete('/api/tasks/non-existent-id')
         .set('Authorization', `Bearer ${userToken}`);
 
@@ -210,7 +220,7 @@ describe('Task Routes', () => {
       const task1 = await Task.create({ title: 'Task 1', status: 'To do' });
       const task2 = await Task.create({ title: 'Task 2', status: 'To do' });
 
-      const response = await request(app)
+      const response = await api
         .put('/api/tasks/reorder')
         .set('Authorization', `Bearer ${userToken}`)
         .send({

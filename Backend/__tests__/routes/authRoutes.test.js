@@ -8,6 +8,8 @@ const authRoutes = require('../../routes/authRoutes');
 const app = express();
 app.use(express.json());
 app.use('/api/auth', authRoutes);
+let server;
+let api;
 
 // Mock JWT_SECRET for tests
 process.env.JWT_SECRET = 'test-secret-key';
@@ -15,11 +17,19 @@ process.env.OTP_DEV_MODE = 'true';
 
 describe('Auth Routes', () => {
   beforeAll(async () => {
+    server = await new Promise((resolve, reject) => {
+      const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+      instance.on('error', reject);
+    });
+    api = request(server);
     await sequelize.sync({ force: true });
   });
 
   afterAll(async () => {
     await sequelize.close();
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   beforeEach(async () => {
@@ -28,7 +38,7 @@ describe('Auth Routes', () => {
 
   describe('POST /api/auth/signup', () => {
     it('should create a new user', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signup')
         .send({
           email: 'newuser@test.com',
@@ -50,7 +60,7 @@ describe('Auth Routes', () => {
         passwordHash: User.hashPassword('password123'),
       });
 
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signup')
         .send({
           email: 'duplicate@test.com',
@@ -64,7 +74,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject invalid email', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signup')
         .send({
           email: 'invalid-email',
@@ -76,7 +86,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject short password', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signup')
         .send({
           email: 'test@test.com',
@@ -88,7 +98,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject empty firstName', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signup')
         .send({
           email: 'test@test.com',
@@ -100,7 +110,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject invalid role', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signup')
         .send({
           email: 'test@test.com',
@@ -124,7 +134,7 @@ describe('Auth Routes', () => {
     });
 
     it('should return OTP for valid credentials', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signin')
         .send({
           email: 'signin@test.com',
@@ -138,7 +148,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject invalid password', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signin')
         .send({
           email: 'signin@test.com',
@@ -151,7 +161,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject non-existent user', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signin')
         .send({
           email: 'nonexistent@test.com',
@@ -164,7 +174,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject invalid email', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/signin')
         .send({
           email: 'invalid-email',
@@ -194,7 +204,7 @@ describe('Auth Routes', () => {
 
     it('should verify valid OTP and return token', async () => {
       // First sign in to get OTP
-      const signinResponse = await request(app)
+      const signinResponse = await api
         .post('/api/auth/signin')
         .send({
           email: 'verify@test.com',
@@ -204,7 +214,7 @@ describe('Auth Routes', () => {
 
       const validOtp = signinResponse.body.devOtp;
 
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/verify-otp')
         .send({
           email: 'verify@test.com',
@@ -219,7 +229,7 @@ describe('Auth Routes', () => {
     });
 
     it('should reject invalid OTP', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/verify-otp')
         .send({
           email: 'verify@test.com',
@@ -234,7 +244,7 @@ describe('Auth Routes', () => {
 
   describe('POST /api/auth/forgot-password', () => {
     it('should return success even for non-existent user (security)', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/forgot-password')
         .send({
           email: 'nonexistent@test.com',
@@ -253,7 +263,7 @@ describe('Auth Routes', () => {
         passwordHash: User.hashPassword('password123'),
       });
 
-      const response = await request(app)
+      const response = await api
         .post('/api/auth/forgot-password')
         .send({
           email: 'forgot@test.com',
